@@ -110,10 +110,9 @@
         } catch (e) { showError(); }
     }
     
-    // Recursive renderer function that sorts BOTH subfolders and files alphabetically
     function renderTree(node, container) {
-        // 1. Sort and render subdirectories first at this folder level
-        const sortedDirs = Object.keys(node.dirs).sort((a, b) => a.localeCompare(b.name, undefined, {numeric: true, sensitivity: 'base'}));
+        // FIXED: Corrected string sorting comparison format (a.localeCompare(b))
+        const sortedDirs = Object.keys(node.dirs).sort((a, b) => a.localeCompare(b, undefined, {numeric: true, sensitivity: 'base'}));
         sortedDirs.forEach(dirName => {
             const wrapper = document.createElement('div');
             wrapper.className = 'tree-node';
@@ -127,12 +126,10 @@
             container.appendChild(wrapper);
         });
 
-        // 2. Sort and render files alphabetically right below the folders at the exact same level
         if (node.files.length > 0) {
             const ul = document.createElement('ul');
             ul.className = 'doc-list';
             
-            // FIXED: Sorts files smoothly in natural alphabetical order
             node.files.sort((a, b) => a.name.localeCompare(b.name, undefined, {numeric: true, sensitivity: 'base'})).forEach(doc => {
                 const li = document.createElement('li');
                 li.className = 'doc-item';
