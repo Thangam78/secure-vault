@@ -4,23 +4,23 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Secure Document Portal</title>
-    <!-- Loads your local cryptographic library file -->
+    <!-- Loads local cryptographic engine -->
     <script src="crypto-js.min.js"></script>
     <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 40px; background: #f6f8fa; color: #24292f; }
-        .container { max-width: 650px; margin: 0 auto; background: white; padding: 30px; border: 1px solid #d0d7de; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 20px; background: #f6f8fa; color: #24292f; }
+        .container { max-width: 650px; margin: 0 auto; background: white; padding: 25px; border: 1px solid #d0d7de; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
         h2 { margin-top: 0; }
-        input[type="password"] { width: 100%; padding: 10px; margin: 10px 0; border: 1px solid #d0d7de; border-radius: 6px; box-sizing: border-box; font-size: 16px; }
-        button { background-color: #2da44e; color: white; border: 1px solid rgba(27,31,36,0.15); padding: 10px 20px; border-radius: 6px; cursor: pointer; font-size: 16px; font-weight: 600; width: 100%; }
+        input[type="password"] { width: 100%; padding: 12px; margin: 10px 0; border: 1px solid #d0d7de; border-radius: 6px; box-sizing: border-box; font-size: 16px; }
+        button { background-color: #2da44e; color: white; border: 1px solid rgba(27,31,36,0.15); padding: 12px 20px; border-radius: 6px; cursor: pointer; font-size: 16px; font-weight: 600; width: 100%; }
         button:hover { background-color: #2c974b; }
         .error { color: #cf222e; display: none; margin-top: 10px; font-weight: bold; }
         
-        .tree-node { margin-left: 20px; margin-top: 8px; }
+        .tree-node { margin-left: 15px; margin-top: 8px; }
         .folder-header { font-size: 16px; font-weight: 600; color: #24292f; padding: 6px 0; display: flex; align-items: center; border-bottom: 1px dashed #d0d7de; }
         .doc-list { list-style: none; padding: 0; margin: 4px 0 4px 0; }
-        .doc-item { display: flex; justify-content: space-between; align-items: center; padding: 8px 8px 8px 0; border-bottom: 1px solid #f0f2f5; }
-        .doc-item span { font-size: 15px; color: #24292f; }
-        .view-btn { background: #0969da; color: white; border: none; width: auto; font-size: 13px; padding: 4px 10px; cursor: pointer; border-radius: 4px; }
+        .doc-item { display: flex; justify-content: space-between; align-items: center; padding: 10px 8px; border-bottom: 1px solid #f0f2f5; }
+        .doc-item span { font-size: 15px; color: #24292f; word-break: break-all; padding-right: 10px; }
+        .view-btn { background: #0969da; color: white; border: none; width: auto; font-size: 13px; padding: 6px 12px; cursor: pointer; border-radius: 4px; white-space: nowrap; }
         .view-btn:hover { background: #0c63e4; }
     </style>
 </head>
@@ -35,8 +35,8 @@
     </div>
     <div id="portal" style="display:none;">
         <h2>📂 Decrypted Document Vault</h2>
-        <p>Assets are classified below by nested paths.</p>
-        <div id="vault-content" style="margin-left: -20px;"></div>
+        <p>Assets are organized in alphabetical order. Tap to save/view.</p>
+        <div id="vault-content" style="margin-left: -15px;"></div>
     </div>
 </div>
 <script>
@@ -55,7 +55,6 @@
 
         const key = CryptoJS.SHA256(password);
         let success = false;
-        
         let treeRoot = { files: [], dirs: {} };
         
         try {
@@ -111,7 +110,6 @@
     }
     
     function renderTree(node, container) {
-        // FIXED: Corrected string sorting comparison format (a.localeCompare(b))
         const sortedDirs = Object.keys(node.dirs).sort((a, b) => a.localeCompare(b, undefined, {numeric: true, sensitivity: 'base'}));
         sortedDirs.forEach(dirName => {
             const wrapper = document.createElement('div');
@@ -133,7 +131,14 @@
             node.files.sort((a, b) => a.name.localeCompare(b.name, undefined, {numeric: true, sensitivity: 'base'})).forEach(doc => {
                 const li = document.createElement('li');
                 li.className = 'doc-item';
-                li.innerHTML = `<span>${doc.icon} ${doc.name}</span><a href="${doc.url}" target="_blank"><button class="view-btn">View</button></a>`;
+                
+                // FIXED: Direct download injection setup that works flawlessly on iOS Safari and Android Chrome
+                li.innerHTML = `
+                    <span>${doc.icon} ${doc.name}</span>
+                    <a href="${doc.url}" download="${doc.name}">
+                        <button class="view-btn">Save / View</button>
+                    </a>
+                `;
                 ul.appendChild(li);
             });
             container.appendChild(ul);
