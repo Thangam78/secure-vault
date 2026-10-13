@@ -1,4 +1,4 @@
-
+```html
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Secure Document Portal</title>
 
-    <!-- Keep crypto-js.min.js in the same directory -->
+    <!-- CryptoJS must be in the same directory as this file -->
     <script src="./crypto-js.min.js"></script>
 
     <style>
@@ -25,7 +25,7 @@
             padding: 25px;
             border: 1px solid #d0d7de;
             border-radius: 6px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
         }
 
         h2 { margin-top: 0; }
@@ -43,33 +43,41 @@
         button {
             background-color: #2da44e;
             color: white;
-            border: 1px solid rgba(27,31,36,0.15);
+            border: 1px solid rgba(27, 31, 36, 0.15);
             padding: 12px 20px;
             border-radius: 6px;
             cursor: pointer;
             font-size: 16px;
             font-weight: 600;
-            width: 100%;
         }
 
         button:hover { background-color: #2c974b; }
-        button:disabled { opacity: 0.6; cursor: not-allowed; }
+
+        button:disabled {
+            background-color: #8c959f;
+            cursor: not-allowed;
+            opacity: 0.8;
+        }
+
+        #unlockBtn { width: 100%; }
+
+        .status {
+            margin-top: 12px;
+            font-size: 14px;
+            color: #57606a;
+        }
 
         .error {
             color: #cf222e;
             display: none;
             margin-top: 10px;
             font-weight: bold;
-            overflow-wrap: anywhere;
         }
 
-        .status {
-            margin-top: 10px;
-            color: #57606a;
-            font-size: 14px;
+        .tree-node {
+            margin-left: 15px;
+            margin-top: 8px;
         }
-
-        .tree-node { margin-left: 15px; margin-top: 8px; }
 
         .folder-header {
             font-size: 16px;
@@ -91,7 +99,7 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
-            gap: 10px;
+            gap: 12px;
             padding: 10px 8px;
             border-bottom: 1px solid #f0f2f5;
         }
@@ -99,7 +107,8 @@
         .doc-item span {
             font-size: 15px;
             color: #24292f;
-            word-break: break-all;
+            word-break: break-word;
+            overflow-wrap: anywhere;
             padding-right: 10px;
         }
 
@@ -113,9 +122,15 @@
             cursor: pointer;
             border-radius: 4px;
             white-space: nowrap;
+            flex-shrink: 0;
         }
 
         .view-btn:hover { background: #0c63e4; }
+
+        .back-btn {
+            background: #57606a;
+            margin-bottom: 15px;
+        }
     </style>
 </head>
 
@@ -124,351 +139,473 @@
 
     <div id="login-box">
         <h2>🔒 Secure Document Viewer</h2>
-        <p>Enter the security key to decrypt the documents.</p>
+        <p>Enter the security key to view the documents.</p>
 
         <input
             type="password"
             id="password"
             placeholder="Enter Password"
             autocomplete="current-password"
+            disabled
         >
 
-        <button id="unlock-button" type="button" disabled>
-            Loading document list...
+        <button id="unlockBtn" type="button" disabled>
+            Loading documents...
         </button>
 
-        <div id="error-msg" class="error" role="alert"></div>
-        <div id="status-msg" class="status" aria-live="polite">
-            Initializing document viewer...
+        <div id="status-msg" class="status" role="status" aria-live="polite">
+            Please wait while the encrypted document list loads.
         </div>
+
+        <div id="error-msg" class="error" role="alert"></div>
     </div>
 
     <div id="portal" style="display:none;">
         <h2>📂 Decrypted Document Vault</h2>
-        <p>Assets are organized in alphabetical order. Tap to save/view.</p>
-        <div id="vault-content" style="margin-left:-15px;"></div>
+        <p>Choose View to open a document in a new tab.</p>
+
+        <button id="backBtn" class="back-btn" type="button">
+            Lock Documents
+        </button>
+
+        <div id="vault-content"></div>
     </div>
 
 </div>
 
 <script>
-(() => {
-    "use strict";
+"use strict";
 
-    let encryptedPayload = null;
+// --------------------------------------------------
+// 1. APPLICATION STATE
+// --------------------------------------------------
 
-    const passwordInput = document.getElementById("password");
-    const unlockButton = document.getElementById("unlock-button");
-    const errorMsg = document.getElementById("error-msg");
-    const statusMsg = document.getElementById("status-msg");
-    const vaultContent = document.getElementById("vault-content");
+let encryptedPayload = null;
+let cryptoReady = typeof CryptoJS !== "undefined";
+let isLoading = false;
+let isUnlocked = false;
 
-    // Load JSON relative to this page's URL.
-    const jsonUrl = new URL(
-        "./encrypted_docs.json",
-        window.location.href
-    );
+// Keep track of generated document URLs so they can be released.
+let documentUrls = [];
 
-    function showError(message) {
-        errorMsg.textContent = message;
-        errorMsg.style.display = "block";
+const unlockBtn = document.getElementById("unlockBtn");
+const passwordInput = document.getElementById("password");
+const statusMsg = document.getElementById("status-msg");
+const errorMsg = document.getElementById("error-msg");
+const loginBox = document.getElementById("login-box");
+const portal = document.getElementById("portal");
+const vaultContent = document.getElementById("vault-content");
+const backBtn = document.getElementById("backBtn");
+
+// --------------------------------------------------
+// 2. LOADING STATUS AND BUTTON CONTROL
+// --------------------------------------------------
+
+function setStatus(message) {
+    statusMsg.textContent = message;
+}
+
+function showError(message) {
+    errorMsg.textContent = "❌ " + message;
+    errorMsg.style.display = "block";
+}
+
+function clearError() {
+    errorMsg.textContent = "";
+    errorMsg.style.display = "none";
+}
+
+function updateUnlockButton() {
+    const ready = cryptoReady &&
+                  encryptedPayload !== null &&
+                  !isLoading &&
+                  !isUnlocked;
+
+    unlockBtn.disabled = !ready;
+    passwordInput.disabled = !ready;
+
+    if (isLoading) {
+        unlockBtn.textContent = "Unlocking...";
+    } else if (!cryptoReady) {
+        unlockBtn.textContent = "Encryption Library Unavailable";
+    } else if (encryptedPayload === null) {
+        unlockBtn.textContent = "Loading documents...";
+    } else if (isUnlocked) {
+        unlockBtn.textContent = "Unlocked";
+    } else {
+        unlockBtn.textContent = "Unlock Documents";
+    }
+}
+
+// --------------------------------------------------
+// 3. LOAD THE ENCRYPTED JSON
+// --------------------------------------------------
+
+async function loadEncryptedDocuments() {
+    updateUnlockButton();
+
+    if (!cryptoReady) {
+        setStatus("The encryption library could not be loaded.");
+        showError(
+            "Unable to load crypto-js.min.js. Check that it exists " +
+            "in the same directory as index.html."
+        );
+        return;
     }
 
-    function clearError() {
-        errorMsg.textContent = "";
-        errorMsg.style.display = "none";
-    }
+    setStatus("Loading encrypted documents...");
+    clearError();
 
-    async function loadEncryptedPayload() {
-        try {
-            if (typeof CryptoJS === "undefined") {
-                throw new Error(
-                    "CryptoJS failed to load. Verify that crypto-js.min.js " +
-                    "is in the same directory as index.html."
-                );
-            }
+    try {
+        // Relative URL works for GitHub Pages project repositories too.
+        const jsonUrl = new URL(
+            "./encrypted_docs.json",
+            window.location.href
+        );
 
-            const response = await fetch(jsonUrl.href, {
-                cache: "no-store"
-            });
+        const response = await fetch(jsonUrl, {
+            cache: "no-store"
+        });
 
-            if (!response.ok) {
-                throw new Error(
-                    "Unable to load encrypted_docs.json. HTTP status: " +
-                    response.status + ". URL: " + jsonUrl.href
-                );
-            }
+        if (!response.ok) {
+            throw new Error(
+                "HTTP " + response.status +
+                " while loading encrypted_docs.json"
+            );
+        }
 
-            const data = await response.json();
+        const data = await response.json();
+
+        if (
+            !data ||
+            typeof data !== "object" ||
+            Array.isArray(data) ||
+            Object.keys(data).length === 0
+        ) {
+            throw new Error(
+                "The encrypted document list is empty or has an invalid format."
+            );
+        }
+
+        // Validate the entries before enabling Unlock.
+        for (const relPath of Object.keys(data)) {
+            const item = data[relPath];
 
             if (
-                !data ||
-                typeof data !== "object" ||
-                Array.isArray(data)
+                !item ||
+                typeof item.ciphertext !== "string" ||
+                typeof item.iv !== "string"
             ) {
                 throw new Error(
-                    "encrypted_docs.json does not contain a JSON object."
+                    "Invalid encrypted document entry: " + relPath
                 );
             }
-
-            encryptedPayload = data;
-
-            unlockButton.disabled = false;
-            unlockButton.textContent = "Unlock Documents";
-
-            statusMsg.textContent =
-                Object.keys(data).length +
-                " encrypted document entries loaded.";
-
-            console.info(
-                "Encrypted payload loaded:",
-                Object.keys(data).length
-            );
-
-        } catch (error) {
-            console.error("Initialization failed:", error);
-
-            unlockButton.disabled = true;
-            unlockButton.textContent = "Document list unavailable";
-
-            statusMsg.textContent = "Initialization failed.";
-            showError(error.message);
         }
+
+        encryptedPayload = data;
+
+        setStatus(
+            "Ready. " + Object.keys(data).length +
+            " encrypted document(s) loaded."
+        );
+
+        updateUnlockButton();
+
+    } catch (error) {
+        console.error("Document loading failed:", error);
+
+        encryptedPayload = null;
+        setStatus("Document loading failed.");
+        showError(
+            "Unable to load encrypted documents. Check the GitHub Pages " +
+            "file paths and try refreshing the page."
+        );
+
+        updateUnlockButton();
+    }
+}
+
+// --------------------------------------------------
+// 4. UNLOCK AND DECRYPT DOCUMENTS
+// --------------------------------------------------
+
+async function unlockPortal() {
+    // Defensive check: never proceed before loading completes.
+    if (
+        !cryptoReady ||
+        encryptedPayload === null ||
+        isLoading ||
+        isUnlocked
+    ) {
+        return;
     }
 
-    function unlockPortal() {
-        clearError();
+    const password = passwordInput.value;
 
-        if (!encryptedPayload) {
-            showError(
-                "The document list has not loaded. Refresh the page and try again."
+    if (!password) {
+        showError("Please enter the security key.");
+        passwordInput.focus();
+        return;
+    }
+
+    clearError();
+    vaultContent.replaceChildren();
+
+    isLoading = true;
+    updateUnlockButton();
+    setStatus("Decrypting documents. Please wait...");
+
+    // Let the browser display the progress state before processing.
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    const key = CryptoJS.SHA256(password);
+    const treeRoot = { files: [], dirs: {} };
+    const newUrls = [];
+
+    try {
+        const paths = Object.keys(encryptedPayload);
+
+        for (let i = 0; i < paths.length; i++) {
+            const relPath = paths[i];
+            const item = encryptedPayload[relPath];
+
+            const ciphertext = CryptoJS.enc.Base64.parse(
+                item.ciphertext
             );
-            return;
+
+            const iv = CryptoJS.enc.Base64.parse(item.iv);
+
+            if (iv.sigBytes !== 16) {
+                throw new Error("Invalid AES IV for " + relPath);
+            }
+
+            const decrypted = CryptoJS.AES.decrypt(
+                { ciphertext: ciphertext },
+                key,
+                {
+                    iv: iv,
+                    mode: CryptoJS.mode.CBC,
+                    padding: CryptoJS.pad.Pkcs7
+                }
+            );
+
+            const bytes = wordArrayToUint8Array(decrypted);
+
+            if (bytes.length === 0) {
+                throw new Error("Decryption produced no data.");
+            }
+
+            const pathParts = relPath.split("/");
+            const pathFileName = pathParts.pop();
+            const fileName = item.filename || pathFileName;
+            const lowerName = fileName.toLowerCase();
+
+            let mimeType = "application/octet-stream";
+            let icon = "📄";
+
+            if (lowerName.endsWith(".pdf")) {
+                mimeType = "application/pdf";
+            } else if (
+                lowerName.endsWith(".jpg") ||
+                lowerName.endsWith(".jpeg")
+            ) {
+                mimeType = "image/jpeg";
+                icon = "🖼️";
+            } else if (lowerName.endsWith(".png")) {
+                mimeType = "image/png";
+                icon = "🖼️";
+            }
+
+            const blob = new Blob([bytes], { type: mimeType });
+            const blobUrl = URL.createObjectURL(blob);
+            newUrls.push(blobUrl);
+
+            // Build the original folder hierarchy.
+            let currentLevel = treeRoot;
+
+            for (const part of pathParts) {
+                if (!currentLevel.dirs[part]) {
+                    currentLevel.dirs[part] = {
+                        files: [],
+                        dirs: {}
+                    };
+                }
+
+                currentLevel = currentLevel.dirs[part];
+            }
+
+            currentLevel.files.push({
+                name: pathFileName,
+                url: blobUrl,
+                icon: icon
+            });
+
+            // Yield periodically so the browser remains responsive.
+            if (i > 0 && i % 10 === 0) {
+                setStatus(
+                    "Decrypting documents: " +
+                    (i + 1) + " of " + paths.length + "..."
+                );
+
+                await new Promise(resolve => setTimeout(resolve, 0));
+            }
         }
 
-        if (typeof CryptoJS === "undefined") {
-            showError("The CryptoJS library is unavailable.");
-            return;
+        if (newUrls.length === 0) {
+            throw new Error("No documents could be decrypted.");
         }
 
-        const password = passwordInput.value;
+        documentUrls = newUrls;
+        renderTree(treeRoot, vaultContent);
 
-        if (!password) {
-            showError("Please enter the password.");
-            passwordInput.focus();
-            return;
-        }
+        isUnlocked = true;
+        loginBox.style.display = "none";
+        portal.style.display = "block";
+
+    } catch (error) {
+        console.error("Document decryption failed:", error);
+
+        // Release any URLs created during this unsuccessful attempt.
+        newUrls.forEach(url => URL.revokeObjectURL(url));
 
         vaultContent.replaceChildren();
 
-        // Preserve the original key derivation and AES settings.
-        const key = CryptoJS.SHA256(password);
-        const treeRoot = { files: [], dirs: {} };
-
-        let decryptedCount = 0;
-
-        try {
-            for (const relPath of Object.keys(encryptedPayload)) {
-                const item = encryptedPayload[relPath];
-
-                if (
-                    !item ||
-                    typeof item.ciphertext !== "string" ||
-                    typeof item.iv !== "string"
-                ) {
-                    console.warn(
-                        "Skipping malformed encrypted entry:",
-                        relPath
-                    );
-                    continue;
-                }
-
-                const ciphertext =
-                    CryptoJS.enc.Base64.parse(item.ciphertext);
-
-                const iv =
-                    CryptoJS.enc.Base64.parse(item.iv);
-
-                const decrypted = CryptoJS.AES.decrypt(
-                    { ciphertext: ciphertext },
-                    key,
-                    {
-                        iv: iv,
-                        mode: CryptoJS.mode.CBC,
-                        padding: CryptoJS.pad.Pkcs7
-                    }
-                );
-
-                const bytes = wordArrayToUint8Array(decrypted);
-
-                if (bytes.length === 0) {
-                    continue;
-                }
-
-                const pathParts = relPath.split("/");
-                const fallbackName =
-                    pathParts[pathParts.length - 1] || "document";
-
-                const displayName =
-                    typeof item.filename === "string" && item.filename
-                        ? item.filename
-                        : fallbackName;
-
-                const lowerName = displayName.toLowerCase();
-
-                let mimeType = "application/octet-stream";
-                let icon = "📄";
-
-                if (lowerName.endsWith(".pdf")) {
-                    mimeType = "application/pdf";
-                } else if (
-                    lowerName.endsWith(".jpg") ||
-                    lowerName.endsWith(".jpeg")
-                ) {
-                    mimeType = "image/jpeg";
-                    icon = "🖼️";
-                } else if (lowerName.endsWith(".png")) {
-                    mimeType = "image/png";
-                    icon = "🖼️";
-                } else if (lowerName.endsWith(".txt")) {
-                    mimeType = "text/plain";
-                }
-
-                const blob = new Blob([bytes], {
-                    type: mimeType
-                });
-
-                const blobUrl = URL.createObjectURL(blob);
-
-                let currentLevel = treeRoot;
-
-                // Reconstruct the folder hierarchy.
-                pathParts.pop();
-
-                for (const part of pathParts) {
-                    if (!currentLevel.dirs[part]) {
-                        currentLevel.dirs[part] = {
-                            files: [],
-                            dirs: {}
-                        };
-                    }
-
-                    currentLevel = currentLevel.dirs[part];
-                }
-
-                currentLevel.files.push({
-                    name: displayName,
-                    url: blobUrl,
-                    icon: icon
-                });
-
-                decryptedCount++;
-            }
-
-            if (decryptedCount > 0) {
-                document.getElementById("login-box").style.display = "none";
-                document.getElementById("portal").style.display = "block";
-
-                renderTree(treeRoot, vaultContent);
-            } else {
-                showError(
-                    "No documents could be decrypted. Check the password " +
-                    "and confirm that the encryption settings match."
-                );
-            }
-
-        } catch (error) {
-            console.error("Decryption failed:", error);
-            showError(
-                "Unable to decrypt the documents. Check the browser console."
-            );
-        }
-    }
-
-    function renderTree(node, container) {
-        const sortedDirs = Object.keys(node.dirs).sort(
-            (a, b) => a.localeCompare(
-                b,
-                undefined,
-                { numeric: true, sensitivity: "base" }
-            )
+        showError(
+            "Unable to decrypt the documents. Check the password and " +
+            "the encrypted document data, then try again."
         );
 
-        sortedDirs.forEach(dirName => {
-            const wrapper = document.createElement("div");
-            wrapper.className = "tree-node";
+        setStatus("Unable to unlock the documents.");
 
-            const header = document.createElement("div");
-            header.className = "folder-header";
-            header.textContent = "📁 " + dirName;
+    } finally {
+        isLoading = false;
+        updateUnlockButton();
+    }
+}
 
-            wrapper.appendChild(header);
+// --------------------------------------------------
+// 5. RENDER THE FOLDER TREE AND VIEW BUTTONS
+// --------------------------------------------------
 
-            renderTree(node.dirs[dirName], wrapper);
-            container.appendChild(wrapper);
-        });
+function renderTree(node, container) {
+    const sortedDirs = Object.keys(node.dirs).sort(
+        (a, b) => a.localeCompare(
+            b,
+            undefined,
+            { numeric: true, sensitivity: "base" }
+        )
+    );
 
-        if (node.files.length > 0) {
-            const ul = document.createElement("ul");
-            ul.className = "doc-list";
+    for (const dirName of sortedDirs) {
+        const wrapper = document.createElement("div");
+        wrapper.className = "tree-node";
 
-            node.files.sort((a, b) =>
-                a.name.localeCompare(
-                    b.name,
-                    undefined,
-                    { numeric: true, sensitivity: "base" }
-                )
-            );
+        const header = document.createElement("div");
+        header.className = "folder-header";
+        header.textContent = "📁 " + dirName;
 
-            node.files.forEach(doc => {
-                const li = document.createElement("li");
-                li.className = "doc-item";
+        wrapper.appendChild(header);
 
-                const name = document.createElement("span");
-                name.textContent = doc.icon + " " + doc.name;
-
-                const link = document.createElement("a");
-                link.href = doc.url;
-                link.download = doc.name;
-
-                const button = document.createElement("button");
-                button.type = "button";
-                button.className = "view-btn";
-                button.textContent = "Save / View";
-
-                link.appendChild(button);
-                li.appendChild(name);
-                li.appendChild(link);
-                ul.appendChild(li);
-            });
-
-            container.appendChild(ul);
-        }
+        renderTree(node.dirs[dirName], wrapper);
+        container.appendChild(wrapper);
     }
 
-    function wordArrayToUint8Array(wordArray) {
-        const words = wordArray.words;
-        const sigBytes = wordArray.sigBytes;
-        const bytes = new Uint8Array(Math.max(0, sigBytes));
-
-        for (let i = 0; i < bytes.length; i++) {
-            bytes[i] =
-                (words[i >>> 2] >>> (24 - (i % 4) * 8)) & 0xff;
-        }
-
-        return bytes;
+    if (node.files.length === 0) {
+        return;
     }
 
-    unlockButton.addEventListener("click", unlockPortal);
+    const ul = document.createElement("ul");
+    ul.className = "doc-list";
 
-    passwordInput.addEventListener("keydown", event => {
-        if (event.key === "Enter" && !unlockButton.disabled) {
-            unlockPortal();
-        }
-    });
+    const sortedFiles = [...node.files].sort(
+        (a, b) => a.name.localeCompare(
+            b.name,
+            undefined,
+            { numeric: true, sensitivity: "base" }
+        )
+    );
 
-    loadEncryptedPayload();
-})();
+    for (const doc of sortedFiles) {
+        const li = document.createElement("li");
+        li.className = "doc-item";
+
+        const name = document.createElement("span");
+        name.textContent = doc.icon + " " + doc.name;
+
+        const link = document.createElement("a");
+        link.href = doc.url;
+        link.download = doc.name;
+
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "view-btn";
+        button.textContent = "Save / View";
+
+        link.appendChild(button);
+        li.appendChild(name);
+        li.appendChild(link);
+        ul.appendChild(li);
+    }
+
+    container.appendChild(ul);
+}
+
+// --------------------------------------------------
+// 6. CONVERT CRYPTOJS OUTPUT TO FILE BYTES
+// --------------------------------------------------
+
+function wordArrayToUint8Array(wordArray) {
+    const words = wordArray.words;
+    const sigBytes = wordArray.sigBytes;
+    const bytes = new Uint8Array(sigBytes);
+
+    for (let i = 0; i < sigBytes; i++) {
+        bytes[i] =
+            (words[i >>> 2] >>> (24 - (i % 4) * 8)) & 0xff;
+    }
+
+    return bytes;
+}
+
+// --------------------------------------------------
+// 7. LOCK THE PORTAL AND RELEASE TEMPORARY FILE URLS
+// --------------------------------------------------
+
+function lockPortal() {
+    documentUrls.forEach(url => URL.revokeObjectURL(url));
+    documentUrls = [];
+
+    vaultContent.replaceChildren();
+    passwordInput.value = "";
+
+    isUnlocked = false;
+    portal.style.display = "none";
+    loginBox.style.display = "block";
+
+    clearError();
+    setStatus("Documents are locked.");
+
+    updateUnlockButton();
+    passwordInput.focus();
+}
+
+// --------------------------------------------------
+// 8. REGISTER EVENTS AND START LOADING
+// --------------------------------------------------
+
+unlockBtn.addEventListener("click", unlockPortal);
+backBtn.addEventListener("click", lockPortal);
+
+passwordInput.addEventListener("keydown", event => {
+    if (event.key === "Enter" && !unlockBtn.disabled) {
+        unlockPortal();
+    }
+});
+
+// Begin loading only after the page's elements exist.
+loadEncryptedDocuments();
+
 </script>
 </body>
 </html>
+```
