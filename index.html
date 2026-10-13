@@ -181,6 +181,35 @@
             background: #57606a;
             margin-bottom: 15px;
         }
+
+        /* Layout alignment for the row * / Thanga/
+        .doc-item {
+            display: flex;
+            justify-content: space-between; 
+            align-items: center;           
+            padding: 10px;
+            border-bottom: 1px solid #eee;
+            gap: 15px; /* Ensures there is always a gap between the text and the buttons */
+            min-width: 0; /* Critical for flex child truncation to work properly */
+        }
+
+        /* TARGET THE FILENAME SPAN: Force single line and add ellipsis if too long */
+        .doc-item > span {
+            white-space: nowrap;      /* Prevents text from wrapping to multiple lines */
+            overflow: hidden;         /* Hides the text that overflows the container */
+            text-overflow: ellipsis;  /* Adds '...' at the end of truncated text */
+            flex-grow: 1;             /* Allows the filename to take up available space */
+            min-width: 0;             /* Allows the span to shrink properly inside the flexbox */
+        }
+
+        /* Button container alignment - ensures buttons stay fixed size and don't shrink */
+        .btn-container {
+            display: flex;
+            gap: 8px;                     
+            align-items: center;          
+            flex-shrink: 0;           /* Prevents the buttons from squishing when names are long */
+        }
+
     </style>
 </head>
 
