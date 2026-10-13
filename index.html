@@ -1,4 +1,4 @@
-```html
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -39,6 +39,56 @@
             box-sizing: border-box;
             font-size: 16px;
         }
+
+        /* Layout alignment for the whole row */
+        .doc-item {
+            display: flex;
+            justify-content: space-between; /* Pushes text to left, buttons to right */
+            align-items: center;           /* Perfectly centers text and buttons vertically */
+            padding: 10px;
+            border-bottom: 1px solid #eee;
+        }
+
+        /* Button container alignment */
+        .btn-container {
+            display: flex;
+            gap: 8px;                     /* Creates a clean gap between the two buttons */
+            align-items: center;          /* Keeps buttons horizontally level */
+        }
+
+        /* Shared button resets */
+        .btn-container button {
+            cursor: pointer;
+            border: none;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+
+        /* VIEW BUTTON: Smaller, secondary color (e.g., Gray/Blue Outline) */
+        .view-btn {
+            background-color: #f0f4f8;
+            color: #1a73e8;
+            border: 1px solid #1a73e8 !important; /* Adds a nice border */
+            padding: 6px 12px;                    /* Smaller padding for smaller size */
+            font-size: 13px;
+        }
+
+        .view-btn:hover {
+            background-color: #e8f0fe;
+        }
+
+        /* DOWNLOAD BUTTON: Larger, primary color (e.g., Solid Blue) */
+        .download-btn {
+            background-color: #1a73e8;
+            color: white;
+            padding: 8px 16px;                    /* Larger padding for prominent size */
+            font-size: 14px;
+        }
+
+        .download-btn:hover {
+            background-color: #1557b0;
+        }
+
 
         button {
             background-color: #2da44e;
@@ -529,23 +579,47 @@ function renderTree(node, container) {
         const li = document.createElement("li");
         li.className = "doc-item";
 
+        // Document name and icon
         const name = document.createElement("span");
         name.textContent = doc.icon + " " + doc.name;
-
-        const link = document.createElement("a");
-        link.href = doc.url;
-        link.download = doc.name;
-
-        const button = document.createElement("button");
-        button.type = "button";
-        button.className = "view-btn";
-        button.textContent = "Save / View";
-
-        link.appendChild(button);
         li.appendChild(name);
-        li.appendChild(link);
+
+        // Create a container for the buttons to handle alignment
+        const btnContainer = document.createElement("div");
+        btnContainer.className = "btn-container";
+
+        // --- VIEW BUTTON ---
+        const viewLink = document.createElement("a");
+        viewLink.href = doc.url;
+        viewLink.target = "_blank";
+
+        const viewButton = document.createElement("button");
+        viewButton.type = "button";
+        viewButton.className = "view-btn";
+        viewButton.textContent = "View";
+
+        viewLink.appendChild(viewButton);
+        btnContainer.appendChild(viewLink);
+
+        // --- DOWNLOAD BUTTON ---
+        const downloadLink = document.createElement("a");
+        downloadLink.href = doc.url;
+        downloadLink.download = doc.name;
+
+        const downloadButton = document.createElement("button");
+        downloadButton.type = "button";
+        downloadButton.className = "download-btn";
+        downloadButton.textContent = "Download";
+
+        downloadLink.appendChild(downloadButton);
+        btnContainer.appendChild(downloadLink);
+
+        // Append container to list item, then list item to list
+        li.appendChild(btnContainer);
         ul.appendChild(li);
     }
+
+
 
     container.appendChild(ul);
 }
@@ -608,4 +682,3 @@ loadEncryptedDocuments();
 </script>
 </body>
 </html>
-```
