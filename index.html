@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Secure Document Portal</title>
-    <!-- Loads local cryptographic engine -->
+    <!-- Local secure cryptographic engine package asset -->
     <script src="crypto-js.min.js"></script>
     <style>
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 20px; background: #f6f8fa; color: #24292f; }
@@ -42,9 +42,21 @@
 <script>
     let encryptedPayload = {};
     
-    fetch('encrypted_docs.json')
-        .then(res => res.json())
-        .then(data => { encryptedPayload = data; });
+    // FIXED: Dynamically calculates the accurate relative script directory location path path parameters 
+    const currentPath = window.location.pathname;
+    const baseDir = currentPath.substring(0, currentPath.lastIndexOf('/')) + '/';
+    const jsonTargetFile = baseDir + 'encrypted_docs.json';
+
+    fetch(jsonTargetFile)
+        .then(res => {
+            if (!res.ok) throw new Error("Network response error: " + res.status);
+            return res.json();
+        })
+        .then(data => { encryptedPayload = data; })
+        .catch(err => {
+            console.error("Critical: Database array asset failed structural delivery payload map fetch:", err);
+            alert("🔒 Security Database Initialization Failed. Please ensure the repository files are compiled properly on GitHub.");
+        });
 
     function unlockPortal() {
         const password = document.getElementById('password').value;
@@ -131,8 +143,6 @@
             node.files.sort((a, b) => a.name.localeCompare(b.name, undefined, {numeric: true, sensitivity: 'base'})).forEach(doc => {
                 const li = document.createElement('li');
                 li.className = 'doc-item';
-                
-                // FIXED: Direct download injection setup that works flawlessly on iOS Safari and Android Chrome
                 li.innerHTML = `
                     <span>${doc.icon} ${doc.name}</span>
                     <a href="${doc.url}" download="${doc.name}">
